@@ -25,7 +25,6 @@ const UserModel = (sequelize, DataTypes) => {
     User.hasMany(models.Todo, {
       onDelete: 'CASCADE'
     })
-    // associations can be defined here
   };
   return User;
 };
