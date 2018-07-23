@@ -1,7 +1,7 @@
 
 const UserModel = (sequelize, DataTypes) => {
   var User = sequelize.define('User', {
-    uuid: {
+    id: {
       type: DataTypes.UUID,
       primaryKey: true,
       defaultValue: DataTypes.UUIDV1
@@ -23,6 +23,7 @@ const UserModel = (sequelize, DataTypes) => {
   }, {});
   User.associate = function(models) {
     User.hasMany(models.Todo, {
+      foreignKey : 'userId',
       onDelete: 'CASCADE'
     })
   };
