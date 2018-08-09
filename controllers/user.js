@@ -1,37 +1,76 @@
 import models from '../models';
+import jwt from 'jsonwebtoken';
+import { Op } from 'sequelize';
+
 const { User } = models;
 
 export default {
-  async getAllUsers(req, res) {
-    try {
-      const users = await User.findAndCountAll();
-      if (!users.length) {
-        return res.json({
-          message: `No user found`
-        });
-      }
-      return res.json({
-        users: users.rows,
-        noOfUsers: users.count
-      });
-    } catch (error) {
-      return res.status(500).json({ error });
-    }
-  },
-  async createUser(req, res) {
+  createUser(req, res) {
     const { username, email, password } = req.body;
-    try {
-      const usernameExists = await User.findOne({ where: { username } });
-      const emailExists = await User.findOne({ where: { email } });
-      if(usernameExists) {
-        return res.status(409).json({ message: "Username in use" });
-      } else if (emailExists) {
-        return res.status(409).json({ message: "Email in use" })
+    User.findOrCreate({
+      where: {
+        [Op.or]: [
+          { username },
+          { email },
+        ]
+      },
+      defaults: { username, email, password }
+    })
+      .spread((user, created) => {
+        if (created) {
+          const { id, email: newEmail } = user;
+          const token = jwt.sign({ id, email: newEmail },
+            process.env.SECRET,
+            { expiresIn: '10h' });
+          return res.send({ success: true, message: 'User Created Successfully', token });
+        }
+        return res.status(409).send({ success: false, message: 'User already exists' });
+      }).catch(() => res.status(500).send({ success: false, message: 'Unexpected error, contact admin' }));
+  },
+  login(req, res) {
+    const { username, email, password } = req.body;
+    User.findOne({
+      where: {
+        [Op.or]: [
+          { username },
+          { email }
+        ]
       }
-      await User.create({ username, email, password });
-      return res.status(201).json({ message: "User successfully created" });
-    } catch (error) {
-      return res.status(500).json({ error });
-    }
-  }
+    }).then((user) => {
+      if (user) {
+        const { id, email } = user;
+        if (user.validPassword(password)) {
+          const token = jwt.sign({ id, email }, process.env.SECRET, { expiresIn: '10h' });
+          return res.send({ success: true, message: 'User Successfully logged in', token })
+        }
+        return res.status(403).send({ success: false, message: 'Invalid Username/Password' });
+      }
+      return res.status(400).send({ success: false, message: 'User not registered' });
+    }).catch((error) => res.status(500).send({ success: false, message: error }))
+  },
+  updateUser(req, res) {
+    User.findById(req.params.id).then((user) => {
+      const { username, email, newPassword, oldPassword } = req.body;
+      let password;
+      if (!user) {
+        return res.status(404).send({ success: false, message: 'User does not exist' });
+      }
+      if (oldPassword && newPassword && user.validPassword(oldPassword)) {
+        password = newPassword;
+      } else {
+        return res.status(403).send({ success: false, message: 'Invalid details entered' });
+      }
+      const requestBody = {
+        passsword: password || user.password,
+        username: username || user.username,
+        email: email || user.email
+      }
+      user.update(requestBody)
+        .then(() => res.send({ success: true, message: 'User successfully updated' }))
+        .catch((error) => res.status(500).send({ success: false, message: error }));
+
+    }).catch(() => {
+      return res.status(500).send({ success: false, message: 'Unexpected error' });
+    })
+  },
 }
