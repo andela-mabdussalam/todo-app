@@ -50,20 +50,18 @@ export default {
   },
   updateUser(req, res) {
     User.findById(req.params.id).then((user) => {
-      const { username, email, newPassword, oldPassword } = req.body;
+      const { username = user.username, email = user.email, newPassword, oldPassword } = req.body;
       let password;
       if (!user) {
         return res.status(404).send({ success: false, message: 'User does not exist' });
       }
       if (oldPassword && newPassword && user.validPassword(oldPassword)) {
         password = newPassword;
-      } else {
-        return res.status(403).send({ success: false, message: 'Invalid details entered' });
       }
       const requestBody = {
-        passsword: password || user.password,
-        username: username || user.username,
-        email: email || user.email
+        password: password || user.password,
+        username,
+        email
       }
       user.update(requestBody)
         .then(() => res.send({ success: true, message: 'User successfully updated' }))
