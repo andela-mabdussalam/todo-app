@@ -1,6 +1,7 @@
+import bcrypt from 'bcryptjs';
 
 const UserModel = (sequelize, DataTypes) => {
-  var User = sequelize.define('User', {
+  const User = sequelize.define('User', {
     id: {
       type: DataTypes.UUID,
       primaryKey: true,
@@ -21,12 +22,39 @@ const UserModel = (sequelize, DataTypes) => {
       allowNull: false,
     },
   }, {});
+
   User.associate = function(models) {
     User.hasMany(models.Todo, {
       foreignKey : 'userId',
       onDelete: 'CASCADE'
     })
   };
+
+  const hashPassword = (password) => {
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(password, salt);
+    return hash
+  }
+
+  User.beforeCreate((user) => {
+    const hash = hashPassword(user.password);
+    if(hash) {
+      user.password = hash;
+    }
+  });
+
+  User.beforeUpdate((user) => {
+    const hash = hashPassword(user.password);
+    if(hash) {
+      user.password = hash;
+    }
+  });
+
+  User.prototype.validPassword = function validPassword(password) {
+    return bcrypt.compareSync(password, this.password);
+  };
+
+
   return User;
 };
 
