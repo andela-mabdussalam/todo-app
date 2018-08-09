@@ -1,44 +1,70 @@
-import models from '../models';
-const { Todo, User } = models;
+import model from '../models';
 
-export default {
-  async getAllTodos(req, res) {
-    try {
-      const todos = await Todo.findAndCountAll();
-      if (!todos.count) {
-        return res.json({
-          message: `No Todo found now`
+const { Todo, User } = model;
+
+const Todos = {
+  create(req, res) {
+    const { title } = req.body;
+    Todo.findOrCreate({
+      where: { title },
+      defaults: {
+        title,
+        userId: req.decoded.id
+      }
+    }).spread((todo, created) => {
+      if (created) {
+        const createdTodo = todo.get({ plain: true });
+        const response = { ...createdTodo, success: true, message: 'Todo Added' };
+        return res.send(response);
+      }
+      return res.status(409).send({ success: false, message: 'Todo already exists' });
+    }).catch(() => {
+      res.status(500).send({ success: false, message: 'Unexpected error occured' });
+    });
+  },
+
+  updateTodo(req, res) {
+    const { id } = req.params;
+    const { title, completed } = req.body;
+    Todo.findById(id).then((todo) => {
+      if (title) {
+        Todo.findOne({ where: { title } }).then((foundTodo) => {
+          if (!foundTodo) {
+            todo.update({ title })
+              .then((updatedTodo) => {
+                res.send({ success: true, message: 'Title Updated Successfully', updatedTodo });
+              });
+          } else if(foundTodo.title !== title){
+            return res.status(409).send({ success: false, message: 'Todo already exists' });
+          }
         });
       }
-      return res.json({
-        todos: todos.rows,
-        noOfTodos: todos.count
-      });
-    } catch (error) {
-      return res.status(500).json({ error });
-    }
+      if (completed) {
+        todo.update({ completed })
+          .then((updatedTodo) => {
+            res.send({ success: true, message: 'Status Updated Successfully', updatedTodo });
+          });
+      }
+    });
   },
-  async createTodo(req, res) {
-    const userId = req.body.userId || req.params.userId ;
-    const { title, description } = req.body;
-    try {
-      const userExists = await User.findOne({ where: { id: userId}});
-      if(!userExists) {
-        return res.status(404).json({ message: "User does not exist" });
-      }
-      const todo = await Todo.findOrCreate({
-        where: { title },
-        defaults: {
-          userId,
-          title,
-          description
-      } });
-      if(!todo[1]) {
-        return res.status(409).json({ message: "Todo already exists" });
-      }
-      return res.status(201).json({ message: "Todo successfully added" });
-    } catch (error) {
-      return res.status(500).json({ error });
-    }
+
+  getUserTodos(req, res) {
+    User.find({ where: { id: req.params.id } }).then((user) => {
+      Todo.findAll({ where: { userId: user.id } }).then(todo => res.send(todo))
+        .catch(() => {
+          res.status(500).send({ success: false, message: 'Unexpected error occured' });
+        });
+    });
+  },
+
+  deleteUserTodo(req, res) {
+    Todo.findById(req.params.id).then((todo) => {
+      todo.destroy().then(() => res.send({ success: true, message: 'Todo deleted Successfully' }));
+    }).catch(() => {
+      res.status(500).send({ success: false, message: 'Unexpected error occured' });
+    });
   }
-}
+
+};
+
+export default Todos;
